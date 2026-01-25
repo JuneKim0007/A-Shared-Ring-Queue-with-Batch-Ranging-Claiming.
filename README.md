@@ -2,9 +2,8 @@
 
 ## Shared Ring Queue with Bitmap-Based Batching for Reduced Lock Contention in Multi-Consumer, Single-Producer Systems
 
-**JoonHak Kim**\
-New York University of Abu Dhabi\
-jk7296@nyu.edu\
+**xxx**\
+jk7296@nyu.edu
 Last Modified: _January 25, 2026_
 
 ### Introduction
