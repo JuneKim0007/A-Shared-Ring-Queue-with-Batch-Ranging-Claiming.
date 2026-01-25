@@ -1,19 +1,4 @@
----
-layout:
-  width: default
-  title:
-    visible: false
-  description:
-    visible: false
-  tableOfContents:
-    visible: true
-  outline:
-    visible: true
-  pagination:
-    visible: true
-  metadata:
-    visible: true
----
+
 
 # Shared Ring Queue with Bitmap-Based Batching for Reduced Lock Contention in Multi-Consumer, Single-P
 
@@ -21,8 +6,8 @@ layout:
 
 **JoonHak Kim**\
 New York University of Abu Dhabi\
-jk7296@nyu.edu\
-&#xNAN;_&#x4C;ast Modified: January 25, 2026_
+jk7296@nyu.edu\_
+last Modified: _January 25, 2026__
 
 ### Introduction
 
