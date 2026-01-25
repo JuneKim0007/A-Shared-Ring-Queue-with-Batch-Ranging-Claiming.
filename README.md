@@ -7,7 +7,7 @@
 **JoonHak Kim**\
 New York University of Abu Dhabi\
 jk7296@nyu.edu\
-last Modified: _January 25, 2026__
+last Modified: _January 25, 2026_
 
 ### Introduction
 
