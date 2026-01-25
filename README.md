@@ -1,7 +1,5 @@
 
 
-# Shared Ring Queue with Bitmap-Based Batching for Reduced Lock Contention in Multi-Consumer, Single-P
-
 ## Shared Ring Queue with Bitmap-Based Batching for Reduced Lock Contention in Multi-Consumer, Single-Producer Systems
 
 **JoonHak Kim**\
