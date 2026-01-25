@@ -36,7 +36,7 @@ However, the design comes with an inherent trade-off as is the case with synchro
 
 **Fragmentation**: The existence of unusable gaps in the queue due to out-of-order advancement of cursors.
 
-**Shared Queue**: A single queue concurrently accessed by multiple producers and consumers.
+**Shared Queue**: A single queue concurrently accessed by either or both multiple producers and consumers.
 
 ### Desingn Assumptions and Pseudocode&#x20;
 
