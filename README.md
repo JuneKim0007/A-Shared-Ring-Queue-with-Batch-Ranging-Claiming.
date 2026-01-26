@@ -1,27 +1,28 @@
-
-
-## Shared Ring Queue with Bitmap-Based Batching for Reduced Lock Contention in Multi-Consumer, Single-Producer Systems
+# A Shared Ring Queue with Batch Ranging Claiming.
 
 **xxx**\
-jk7296@nyu.edu
-Last Modified: _January 25, 2026_
+jk7296@nyu.edu Last Modified: _January 25, 2026_
 
-### Introduction
+## TL;DR:&#x20;
+
+A shared ring queue in which multiple consumers only claim contiguous batch dequeue ranges to reduce lock contention instead of dequeuing while holding the lock. A bitmap and additional metadata are used to coordinate consumers and producers while preserving a circular, contiguous memory layout.
+
+## Introduction
 
 Ensuring safe access to a shared queue among multiple consumers has been a challenge in systems optimization. In particular, preserving sequential consistency of a queue typically requires some form of global lock and strict ordering among participants. However, doing so with moderate overhead, especially caused by lock contention, remains challenging.
 
-Consequently, existing systems tend to adopt one of two approaches:&#x20;
+Consequently, existing systems tend to adopt one of two approaches:
 
-1. Sharded or per-consumer queues, which improve scalability, but sacrifice global ordering guarantees, or&#x20;
+1. Sharded or per-consumer queues, which improve scalability, but sacrifice global ordering guarantees, or
 2. A globally locked shared queue, which preserves sequential consistency but suffers from significant lock contention.
 
-In this work, I focus on the second approach; I introduce a **Shared Ring Queue Using Bitmap-Based Dequeue.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue  mechanism.&#x20;
+In this work, I focus on the second approach; I introduce a **Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
 
-In this model, consumers maintain a local buffer to store data fetched from the Shared Queue. Unlike conventional ring queues, both consumer and producer side maintain additional metadata, serves as a coordination layer between producer and consumers.
+In this model, consumers maintain a local buffer to store data fetched from the Shared Queue. Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
 
 However, the design comes with an inherent trade-off as is the case with synchronization-based queue models. By amortizing fetch overhead from the shared buffer, the model allows consumers to operate under weaker assumptions and with reduced synchronization costs; however, consumers each may contribute to a producer-side illusion in which the queue appears more occupied than it actually is. The implications of this trade-off, are discussed in subsequent sections.
 
-### Terms
+## Terms
 
 **Producer**: A thread that enqueues tasks into the shared queue.
 
@@ -33,11 +34,13 @@ However, the design comes with an inherent trade-off as is the case with synchro
 
 **Batching**: Fetching a contiguous range of queue slots in a single operation.
 
+**Claiming Range:** Rather than immediately dequeuing elements, the consumer records a contiguous range of indices to be dequeued later.
+
 **Fragmentation**: The existence of unusable gaps in the queue due to out-of-order advancement of cursors.
 
 **Shared Queue**: A single queue concurrently accessed by either or both multiple producers and consumers.
 
-### Desingn Assumptions and Pseudocode&#x20;
+## Design Assumptions and Pseudocode
 
 For simplicity, I assume a queue of a single-producer among multiple consumers. While the design can be extended to support multiple producers and consumers, I do not generally recommend such configurations due to not only additional complexity in implementation but reduced performance benefits, contrary to the design goal of reducing worker overhead.
 
@@ -72,24 +75,24 @@ struct consumer {
 * **`batch_committed:`** Flag indicating that all active batches have been completed and the producer can safely consume the committed count.
 * **`batched_dequeue_count:`** Counter that accumulates the total number of slots dequeued by all participating consumers during the current batch. Once the batch completes, it flushed/added to `committed_dequeue_count`
 * **`committed_dequeue_count:`** Aggregated counter visible to the producer, used by the producer to advance the tail.
-* The **`batch_commit_lock:`** Lock used to synchronize the updates between the producer and consumer regarding `num_occupancy` after consumers finish processing their batches.&#x20;
+* The **`batch_commit_lock:`** Lock used to synchronize the updates between the producer and consumer regarding `num_occupancy` after consumers finish processing their batches.
 
 `logical_occupancy` is used by the producer to determine the number of currently occupied slots in the queue. Unlike traditional ring queues, which calculate occupancy based on the `head` and `tail` pointers, `logical_occupancy` provides a direct representation of the queue's occupied slots for the producer. These design assumptions will be further elaborated in a later section.
 
 **Consumer-local fields:**
 
-* **`batch_head` / `batch_tail`** – Indices marking the start and end of the current batch in the shared queue.
-* **`local_buffer`** – Local storage for fetched slots to amortize access to the shared queue.
+* **`batch_head` / `batch_tail:`** Indices marking the start and end of the current batch in the shared queue.
+* **`local_buffer:`** Local storage for fetched slots to amortize access to the shared queue.
 
-### Mechanism
+## Mechanism
 
-#### Batching via Range-Marking
+### Batching via Range-Marking
 
-Batching is especially beneficial when the underlying memory layout is contiguous, as it improves cache spatial locality and reduces synchronization costs. However, batching typically requires some form of sequential consistency over the queue. I employed a **bitmap-based, mark-only batching mechanism** that allows consumers to batch dequeue operations while avoiding queue fragmentation.
+Batching is especially beneficial when the underlying memory layout is contiguous, as it improves cache spatial locality and reduces synchronization costs. However, batching typically requires some form of sequential consistency over the queue. I employed a **Bitmap-Based, Claiming-Range Batch mechanism** that allows consumers to batch dequeue operations while avoiding queue fragmentation.
 
 However, naive batching while holding a lock still suffers due to lock contention. To mitigate this, each consumer **acquires the lock only to mark a continuous range of slots** that it will dequeue later, rather than holding the lock for the entire dequeue operation.
 
-#### Mark-only Batching Procedure:
+### Claiming-Range Batch Procedure:
 
 1. A consumer acquires the queue lock.
 2. The consumer records the current `head` of the `SharedRingQueue`.
@@ -113,7 +116,7 @@ This approach avoids holding the lock during the actual dequeue operation; the l
 1. **Fragmentation:** Consumers may leave unconsumed gaps in the queue if batches are not fully processed in order. If a consumer advances `SharedRingQueue.tail` prematurely without proper coordination, it can break **queue correctness**, potentially allowing producers to overwrite slots that are still in use.
 2. **Producer Concurrency and Queue Correctness:** Consumers may advance `SharedRingQueue.head` and update the value of `logical_occupancy` as they mark and dequeue slots. However, a producer may attempt to enqueue new items while `logical_occupancy` has not yet been updated to reflect completed dequeues. In such cases, the producer can hold **incorrect occupancy information**, violating **queue correctness.**
 
-### Fragmentation problem
+## Fragmentation problem
 
 Consider two consumers, A and B:
 
@@ -133,7 +136,7 @@ Each consumer is assigned a unique index `i` corresponding to its `consumer_id`.
 
 When a consumer begins fetching a batch, it first sets the corresponding bit in `active_batches` according to its `consumer_id`. After marking its batch range and completing the dequeue operation, the consumer clears its bit. Since each consumer has a unique `consumer_id`, the bitmap value being zero indicates that no consumers are currently participating in batching. When all bits are cleared, it ensures that all active batching participants have finished dequeuing, and it is therefore safe to advance `SharedRingQueue.tail`. There are yet two additional issues related to this mechanism that are bitmap.value never being set to 0, and producer enqueing violating queue's correctness.
 
-#### **Bitmap-Based Dequeue Procedure**
+### **Bitmap-Based Dequeue Procedure**
 
 1. Consumer acquires the lock.
 2. Consumer sets its bit in `active_batches` and marks a batch range using `batch_head` and `batch_tail`.
@@ -142,9 +145,9 @@ When a consumer begins fetching a batch, it first sets the corresponding bit in 
 5. Consumer finishes dequeing individually then clears its bit in `active_batches`.
 6. Consumer checks whether `active_batches` is now zero. If so, it advances `SharedRingQueue.tail` by the value of `batched_dequeue_count`, updates `logical_occupancy;` accordingly, and then resets `batched_dequeue_count` to zero.
 
-#### **Race Condition in Producer-Consumer Synchronization**
+### **Race Condition in Producer-Consumer Synchronization**
 
-As mentioned in the design assumptions, the producer do not trust the `head`  pointers of the queue. This is because consumers can advance the `head` without actually dequeuing, creating an illusion that the queue is more empty than it actually is. However, if consumers update `logical_occupancy`, the potential race condition between producer enqueuing and consumer batch-dequeuing could be introduced.
+As mentioned in the design assumptions, the producer do not trust the `head` pointers of the queue. This is because consumers can advance the `head` without actually dequeuing, creating an illusion that the queue is more empty than it actually is. However, if consumers update `logical_occupancy`, the potential race condition between producer enqueuing and consumer batch-dequeuing could be introduced.
 
 For example, when multiple consumers finish batching and set their bits in `active_batches` to 0. One consumer at the last then sees `active_batches` set to zero, proceeds to read `logical_occupancy` and decrement it by the value of `batched_dequeue_count`. However, before updating `logical_occupancy`, a producer might enqueue new items, changing the value of `logical_occupancy`. This causes the consumer to hold onto old values that have not been correctly updated.
 
@@ -156,7 +159,7 @@ The producer, on the other hand, checks the value of `batch_committed` before en
 
 In this way, the producer free slots with the guarantee that they do not overwrite slots that may still be in use. This design ensures that at most one consumer that observes `active_batches.value == 0` and one producer that observes `batch_committed == true` will hold `batch_commit_lock` at any given time, thereby minimizing lock contention.
 
-#### Procedure
+### Procedure
 
 1. **Consumer**:
    * Consumer finishes its batch and checks if `active_batches.value == 0`.
@@ -171,7 +174,7 @@ In this way, the producer free slots with the guarantee that they do not overwri
 
 This implementation avoids most concurrency issues by separating a layer of trust and coordination responsibilities between producers and consumers. However, this itself fail on one condition in which `bitmap.value` is never set to 0 because consumers frequently batches, hardly allowing `bitmap.value` being set to 0.
 
-### Continuous Fetching and Non-Advancing Tail
+## Continuous Fetching and Non-Advancing Tail
 
 A potential issue arises when consumers continuously fetch batches such that `active_batches` rarely becomes zero. In this case, producers are under the **illusion** that the queue is more full than it actually is, while in reality many slots could remain free. This occurs because the `logical_occupancy` does not get decremented, when the bitmap is not cleared.
 
@@ -180,28 +183,28 @@ This issue becomes more severe when:
 * The number of consumers is large.
 * Fetch frequency is high.
 
-#### Possible Mitigation
+### Possible Mitigation
 
 Carefully scheduling fetch intervals for each consumers can reduce the probability that `active_batches` never becomes zero. Other mitigations are also possible. However, to guarantee correctness, many approaches can be considered; in this paper, I focus on maintaining a **global counter** to control the number of batching participants. Specifically, consumers are blocked when the global counter indicates that the number of consumers participating in batching has reached a certain threshold. This approach limits the number of consumers that can batch-dequeue from the shared queue. In practice, however, I believe careful scheduling of fetch intervals would be sufficient.
 
-#### Limiting Active Batch Participants
+### Limiting Active Batch Participants
 
 A global counter limits how many consumers may participate in batching concurrently. This counter is updated under a lock during batch requests. If the limit is reached, consumers are prevented from starting batching.
 
 Once the bitmap becomes zero, the counter is reset, allowing consumers batching again. This guarantees that the system eventually reaches a state where the producer can update to `logical_occupancy` preventing additional consumers from participating in batching before the bitmap clears. Handling potential batching failures may be required, but this is a separate concern.
 
-#### Limiting Batch Participants Procedure
+### Limiting Batch Participants Procedure
 
 1. The shared queue maintains an additional variable `num_batch_participants`, initially set to zero.
 2. A consumer requesting batching first checks `num_batch_participants`.
 3. If `num_batch_participants < participant_limit`, the consumer acquires the lock.
 4. Inside the critical section, the consumer checks the condition again to ensure that `num_batch_participants` remains below the limit, avoiding race conditions.
 5. If it is safe to proceed, the consumer increments `num_batch_participants`.
-6. If a consumer observes `active_batches.value == 0`, it updates `committed_dequeue_count`, resets `batched_dequeue_count`, and resets `num_batch_participants` to `0`.             &#x20;
+6. If a consumer observes `active_batches.value == 0`, it updates `committed_dequeue_count`, resets `batched_dequeue_count`, and resets `num_batch_participants` to `0`.
 
-Other correctness mechanisms are possible. However, to avoid race conditions, reading and updating `num_batch_participants` must follow a strict ordering.&#x20;
+Other correctness mechanisms are possible. However, to avoid race conditions, reading and updating `num_batch_participants` must follow a strict ordering.
 
-### Constraints and Tradeoffs
+## Constraints and Tradeoffs
 
 This design significantly reduces lock contention overhead while preserving the sequential consistency of the circular queue. However, it does so by intentionally creating the illusion that the queue is more full on the producer side than it actually is.
 
@@ -211,17 +214,15 @@ Because this design shifts burden from consumers to the shared queue state, it p
 * Consumers do not fetch too frequently.
 * Consumers tend to spend longer time processing data compare to fetching from the shared queue.
 
-### Conclusion
+## Conclusion
 
 Although consumers contend less frequently for locks, the queue can temporarily hold unusable slots that could, in reality, be reclaimed. The key trade-off in this design is between reducing lock contention and intentionally creating “fake-occupied” slots from the producer’s perspective.
 
-In practical scenarios, this trade-off can be beneficial when consumers should not spend too long contending for locks and when both local buffers and queue slots are relatively small. For example, consumers may fetch small-sized data but perform heavy computation on it, such as executing predefined functions where slots only store the required arguments and function identifiers.&#x20;
+In practical scenarios, this trade-off can be beneficial when consumers should not spend too long contending for locks and when both local buffers and queue slots are relatively small. For example, consumers may fetch small-sized data but perform heavy computation on it, such as executing predefined functions where slots only store the required arguments and function identifiers.
 
 Additionally, because this design maintains a contiguous queue state, fetching can be faster due to reduced synchronization overheads. However, this also raises the question of how to control and maintain the fetching frequency for each consumer.
 
-
-
-### Pseudo Code (Simplified)
+## Pseudo Code (Simplified)
 
 ```c
 struct SharedRingQueue {
@@ -281,4 +282,3 @@ void single_producer_enqueue(SharedRingQueue* q, Slot task){
 }
 
 ```
-
