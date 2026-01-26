@@ -88,8 +88,8 @@ struct consumer {
     
     uint64_t  batch_head;
     uint64_t  batch_tail;
-    Slot      local_buffer[M]; //Optional, consumers can directly dequeue 
-                               //from the shared queue
+    Slot      local_buffer[M]; //Optional, consumers don't necessarily need to
+                               // copy-and paste data from the shared queue
 };
 ```
 
@@ -267,8 +267,8 @@ struct consumer {
     uint32_t  consumer_id;
     uint64_t  batch_head;
     uint64_t  batch_tail;
-    Slot      local_buffer[M]; //Optional, consumers can also dequeue directly 
-                               //from the shared Queue.
+    Slot      local_buffer[M]; //Optional, consumers dont necessarily need to 
+                               //copy and paste from the shared Queue.
 };
 
 void consumer_fetch(Consumer* w, SharedRingQueue*q) {
