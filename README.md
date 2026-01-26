@@ -25,7 +25,7 @@ layout:
 **JoonHak Kim**\
 jk7296@nyu.edu\
 Last Modified: _January 25, 2026_\
-Keywords: ring queue, bitmap, batch dequeue, lock contention, range reservation, concurrent queues
+Keywords: ring queue, bitmap, batch dequeue, lock contention, range reservation, claim range, concurrent queues, high throughput,&#x20;
 
 ## TL;DR:&#x20;
 
@@ -42,7 +42,7 @@ Consequently, existing systems tend to adopt one of two approaches:
 
 In this work, I focus on the second approach; I introduce a **Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
 
-&#x20;Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
+Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
 
 However, the design comes with an inherent trade-off as is the case with synchronization-based queue models. By amortizing fetch overhead from the shared buffer, the model allows consumers to operate under weaker assumptions and with reduced synchronization costs; however, consumers each may contribute to a producer-side illusion in which the queue appears more occupied than it actually is. The implications of this trade-off, are discussed in subsequent sections.
 
