@@ -1,9 +1,31 @@
+---
+description: >-
+  A shared ring queue design for multiple consumers using bitmap-based batch
+  dequeue. Consumers claim contiguous dequeue ranges to reduce lock contention
+  while preserving a circular queue structure
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+---
+
 # A Shared Ring Queue with Batch Ranging Claiming.
 
 **New York University Abu Dhabi**\
 **JoonHak Kim**\
 jk7296@nyu.edu\
-Last Modified: _January 25, 2026_
+Last Modified: _January 25, 2026_\
+Keywords: ring queue, bitmap, batch dequeue, lock contention, range reservation, concurrent queues
 
 ## TL;DR:&#x20;
 
