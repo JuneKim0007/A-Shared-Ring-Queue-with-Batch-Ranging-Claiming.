@@ -33,14 +33,7 @@ A shared ring queue in which multiple consumers only claim contiguous batch dequ
 
 ## Introduction
 
-Ensuring safe access to a shared queue among multiple consumers has been a challenge in systems optimization. In particular, preserving sequential consistency of a queue typically requires some form of global lock and strict ordering among participants. However, doing so with moderate overhead, especially caused by lock contention, remains challenging.
-
-Consequently, existing systems tend to adopt one of two approaches:
-
-1. Sharded or per-consumer queues, which improve scalability, but sacrifice global ordering guarantees, or
-2. A globally locked shared queue, which preserves sequential consistency but suffers from significant lock contention.
-
-In this work, I focus on the second approach; I introduce a **Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
+In this page, I introduce a **Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
 
 Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
 
@@ -66,7 +59,7 @@ However, the design comes with an inherent trade-off as is the case with synchro
 
 ## Design Assumptions and Pseudocode
 
-For simplicity, I assume a queue of a single-producer among multiple consumers. While the design can be extended to support multiple producers and consumers, I do not generally recommend such configurations due to not only additional complexity in implementation but reduced performance benefits, contrary to the design goal of reducing worker overhead.
+For simplicity, I assume a queue of a single-producer among multiple consumers. While the design can be extended to support multiple producers and consumers, I do not generally recommend such configurations due to not only additional complexity in implementation but as it may further unstablizes the Queue state which will be discussed in other sections.
 
 ```
 struct SharedRingQueue {
@@ -112,6 +105,8 @@ struct consumer {
 ## Mechanism
 
 ### Batching via Range-Marking
+
+_**Feel free to skip this section and just take a look at the pictures below.**_
 
 Batching is especially beneficial when the underlying memory layout is contiguous, as it improves cache spatial locality and reduces synchronization costs. However, batching typically requires some form of sequential consistency over the queue. I employed a **Bitmap-Based, Claiming-Range Batch mechanism** that allows consumers to batch dequeue operations while avoiding queue fragmentation.
 
