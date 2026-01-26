@@ -42,7 +42,7 @@ Consequently, existing systems tend to adopt one of two approaches:
 
 In this work, I focus on the second approach; I introduce a **Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
 
-In this model, consumers maintain a local buffer to store data fetched from the Shared Queue. Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
+&#x20;Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
 
 However, the design comes with an inherent trade-off as is the case with synchronization-based queue models. By amortizing fetch overhead from the shared buffer, the model allows consumers to operate under weaker assumptions and with reduced synchronization costs; however, consumers each may contribute to a producer-side illusion in which the queue appears more occupied than it actually is. The implications of this trade-off, are discussed in subsequent sections.
 
@@ -88,7 +88,8 @@ struct consumer {
     
     uint64_t  batch_head;
     uint64_t  batch_tail;
-    Slot      local_buffer[M];
+    Slot      local_buffer[M]; //Optional, consumers can directly dequeue 
+                               //from the shared queue
 };
 ```
 
@@ -266,7 +267,8 @@ struct consumer {
     uint32_t  consumer_id;
     uint64_t  batch_head;
     uint64_t  batch_tail;
-    Slot      local_buffer[M];
+    Slot      local_buffer[M]; //Optional, consumers can also dequeue directly 
+                               //from the shared Queue.
 };
 
 void consumer_fetch(Consumer* w, SharedRingQueue*q) {
