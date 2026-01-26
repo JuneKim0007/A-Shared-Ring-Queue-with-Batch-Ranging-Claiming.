@@ -1,7 +1,9 @@
 # A Shared Ring Queue with Batch Ranging Claiming.
 
-**xxx**\
-jk7296@nyu.edu Last Modified: _January 25, 2026_
+**New York University Abu Dhabi**\
+**JoonHak Kim**\
+jk7296@nyu.edu\
+Last Modified: _January 25, 2026_
 
 ## TL;DR:&#x20;
 
