@@ -33,7 +33,7 @@ A shared ring queue in which multiple consumers only claim contiguous batch dequ
 
 ## Introduction
 
-In this page, I introduce a **Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers.** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
+**Shared Ring Queue with Bitmap-Based Batched Range Claiming for Consumers:** The design aims to achieve safe concurrent access at relatively low overhead through the use of **range-marking batching** and a **bitmap-based** dequeue mechanism.
 
 Unlike conventional shared ring queues, consumers _claim_ a contiguous range for batch dequeuing while holding the lock, but perform the actual dequeues after releasing the lock to reduce lock contention. To support this, both producers and consumers maintain additional metadata that serves as a coordination layer between enqueue and dequeue operations.
 
