@@ -29,7 +29,7 @@ Keywords: ring queue, bitmap, batch dequeue, lock contention, range reservation,
 
 ## TL;DR:&#x20;
 
-A shared ring queue in which multiple consumers only claim contiguous batch dequeue ranges to reduce lock contention instead of dequeuing while holding the lock. A bitmap and additional metadata are used to coordinate consumers and producers while preserving a circular, contiguous memory layout. For pseudo code, refer to the last section.
+A shared ring queue in which multiple consumers only claim contiguous batch dequeue ranges atomically and performing actual removal outside the critical section to reduce lock contention. A bitmap and additional metadata are used to coordinate consumers and producers while preserving a circular, contiguous memory layout. For pseudo code, refer to the last section.
 
 ## Introduction
 
