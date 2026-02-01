@@ -274,11 +274,12 @@ struct consumer {
 
 void consumer_fetch(Consumer* w, SharedRingQueue*q, int batch_size){
 
-    //Failure Check
-    //Check if can fetch (e.g., available slots >= batch_size)
 
     lock(q->lock);
     bitmap_set(q->active_batches, w->consumer_id);
+    
+    //Failure Check
+    //Check if can fetch (e.g., available slots >= batch_size)
     if (!can_fetch(q, batch_size)){
         bitmap_clear(q->active_batches, w->consumer_id);
         unlock(q->lock);
@@ -305,7 +306,7 @@ void consumer_fetch(Consumer* w, SharedRingQueue*q, int batch_size){
 void single_producer_enqueue(SharedRingQueue* q, Slot task){
     if (q->is_committed){
         lock(q->batch_commit_lock);
-        q->logical_occupancy -= q->committed_accumulation;  // ← ADDED
+        q->logical_occupancy -= q->committed_accumulation; 
         q->committed_accumulation = 0;
         q->is_committed = false;
         unlock(q->batch_commit_lock);
