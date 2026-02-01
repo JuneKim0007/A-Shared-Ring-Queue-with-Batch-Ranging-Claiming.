@@ -283,7 +283,6 @@ void consumer_fetch(Consumer* w, SharedRingQueue*q) {
         lock(q->batch_commit_lock);
         q->committed_accumulation +=q->batch_accumulation_counter;
         q->batch_accumulation_counter =0;
-        q->tail =(q->tail + q->committed_accumulation) %N;
         q->is_committed =true;
         unlock(q->batch_commit_lock);
     }
@@ -292,7 +291,7 @@ void consumer_fetch(Consumer* w, SharedRingQueue*q) {
 void single_producer_enqueue(SharedRingQueue* q, Slot task){
     if (q->is_committed){
         lock(q->batch_commit_lock);
-        q->tail =(q->tail + q->committed_accumulation) %N;
+        q->logical_occupancy -= committed_accumulation
         q->committed_accumulation =0;
         q->is_committed =false;
         unlock(q->batch_commit_lock);
