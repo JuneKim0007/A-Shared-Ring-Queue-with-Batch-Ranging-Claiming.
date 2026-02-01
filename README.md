@@ -24,7 +24,7 @@ layout:
 **New York University Abu Dhabi**\
 **JoonHak Kim**\
 jk7296@nyu.edu\
-Last Modified: _January 25, 2026_\
+Last Modified: _Feb, 1, 2026_\
 Keywords: ring queue, bitmap, batch dequeue, lock contention, range reservation, claim range, high throughput, consumer-friendly, worker-friendly, lock-contention.
 
 ## TL;DR:&#x20;
