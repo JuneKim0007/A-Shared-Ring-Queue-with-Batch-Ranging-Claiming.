@@ -93,7 +93,7 @@ struct consumer {
 * **`batch_committed:`** Flag indicating that all active batches have been completed and the producer can safely consume the committed count.
 * **`batched_dequeue_count:`** Counter that accumulates the total number of slots dequeued by all participating consumers during the current batch. Once the batch completes, it flushed/added to `committed_dequeue_count`
 * **`committed_dequeue_count:`** Aggregated counter visible to the producer, used by the producer to update logical\_occupancy.
-* The **`batch_commit_lock:`** Lock used to synchronize the updates between the producer and consumer regarding `num_occupancy` after consumers finish processing their batches.
+* The **`batch_commit_lock:`** Lock used to synchronize the updates between the producer and consumer regarding `logical_occupancy` after consumers finish processing their batches.
 
 `logical_occupancy` is used by the producer to determine the number of currently occupied slots in the queue. Unlike traditional ring queues, which calculate occupancy based on the `head` and `tail` pointers, `logical_occupancy` provides a direct representation of the queue's occupied slots for the producer. These design assumptions will be further elaborated in a later section.
 
@@ -154,16 +154,19 @@ Each consumer is assigned a unique index `i` corresponding to its `consumer_id`.
 * **`active_batches`** — a bitmap with one bit per consumer indicating whether that consumer has an active batch.
 * **`batched_dequeue_count`** — an integer counter tracking the total number of slots claimed by all active batches.
 
-When a consumer begins fetching a batch, it first sets the corresponding bit in `active_batches` according to its `consumer_id`. After marking its batch range and completing the dequeue operation, the consumer clears its bit. Since each consumer has a unique `consumer_id`, the bitmap value being zero indicates that no consumers are currently participating in batching. When all bits are cleared, it ensures that all active batching participants have finished dequeuing, and it is therefore safe to update the `logical_occupancy`. There are yet two additional issues related to this mechanism that are bitmap.value never being set to 0, and producer enqueing violating queue's correctness.
+When a consumer begins fetching a batch, it acquires the lock and sets the corresponding bit in active\_batches according to its consumer\_id. After marking its batch range, the consumer releases the lock and performs the actual dequeue operation. After completing the dequeue, the consumer clears its bit. Since each consumer has a unique `consumer_id`, the bitmap value being zero indicates that no consumers are currently participating in batching. \
+\
+When all bits are cleared, it ensures that all active batching participants have finished dequeuing, and it is therefore safe to update the `logical_occupancy`. There are yet two additional issues related to this mechanism that are bitmap.value never being set to 0, and producer enqueing violating queue's correctness.
 
 ### Mechanism 2: **Bitmap-Based Dequeue Procedure**
 
 1. Consumer acquires the lock.
-2. Consumer sets its bit in `active_batches` and marks a batch range using `batch_head` and `batch_tail`.
-3. Consumer releases the lock.
-4. Consumer copies tasks from the shared queue into its `local_buffer` according to its batch range.
-5. Consumer finishes dequeing individually then clears its bit in `active_batches`.
-6. Consumer checks whether `active_batches` is now zero. If so, it advances `SharedRingQueue.tail` by the value of `batched_dequeue_count`, updates `logical_occupancy;` accordingly, and then resets `batched_dequeue_count` to zero.
+2. If the consumer cannot fetch (e.g. , insufficient slots or participant limit reached), the consumer clears its b it in active\_batches before releasing the lock.
+3. Consumer sets its bit in `active_batches` and marks a batch range using `batch_head` and `batch_tail`.
+4. Consumer releases the lock.
+5. Consumer copies tasks from the shared queue into its `local_buffer` according to its batch range.
+6. Consumer finishes dequeing individually then clears its bit in `active_batches`.
+7. Consumer checks whether `active_batches` is now zero. If so, it advances `SharedRingQueue.tail` by the value of `batched_dequeue_count`, updates `logical_occupancy;` accordingly, and then resets `batched_dequeue_count` to zero.
 
 ### **Problem 2: Race Condition in Producer-Consumer Synchronization**
 
@@ -217,14 +220,17 @@ Once the bitmap becomes zero, the counter is reset, allowing consumers batching 
 
 1. The shared queue maintains an additional variable `num_batch_participants`, initially set to zero.
 2. A consumer requesting batching first checks `num_batch_participants`.
-3. If `num_batch_participants < participant_limit`, the consumer acquires the lock.
-4. Inside the critical section, the consumer checks the condition again to ensure that `num_batch_participants` remains below the limit, avoiding race conditions.
-5. If it is safe to proceed, the consumer increments `num_batch_participants`.
-6. If a consumer observes `active_batches.value == 0`, it updates `committed_dequeue_count`, resets `batched_dequeue_count`, and resets `num_batch_participants` to `0`.
+3. f it is safe to proceed, the consumer sets its bit in `active_batches` and increments `num_batch_participants.`
+4. If `num_batch_participants < participant_limit`, the consumer acquires the lock.
+5. Inside the critical section, the consumer checks the condition again to ensure that `num_batch_participants` remains below the limit, avoiding race conditions.
+6. If it is safe to proceed, the consumer increments `num_batch_participants`.
+7. If a consumer observes `active_batches.value == 0`, it updates `committed_dequeue_count`, resets `batched_dequeue_count`, and resets `num_batch_participants` to `0`.
 
 Other correctness mechanisms are possible. However, to avoid race conditions, reading and updating `num_batch_participants` must follow a strict ordering.
 
 ## Constraints and Tradeoffs
+
+Batch size must not exceed the SharedQueue size.
 
 This design significantly reduces lock contention overhead while preserving the sequential consistency of the circular queue. However, it does so by intentionally creating the illusion that the queue is more full on the producer side than it actually is.
 
@@ -249,7 +255,7 @@ struct SharedRingQueue {
     Slot      buffer[N];
     uint64_t  head;
     uint64_t  tail;
-    uint64_t  num_used_slots;
+    uint64_t  logical_occupancy;
     Mutex     lock;
     Mutex     batch_commit_lock;
     Bitmap    active_batches;
@@ -266,10 +272,17 @@ struct consumer {
                                //copy and paste from the shared Queue.
 };
 
-void consumer_fetch(Consumer* w, SharedRingQueue*q) {
+void consumer_fetch(Consumer* w, SharedRingQueue*q, int batch_size){
     bitmap_set(q->active_batches, w->consumer_id);
-
+    
     lock(q->lock);
+    //Failure Check
+    //Check if can fetch (e.g., available slots >= batch_size)
+    if (!can_fetch(q, batch_size)){
+        bitmap_clear(q->active_batches, w->consumer_id);
+        unlock(q->lock);
+        return;
+    }
     w->batch_head =q->head;
     w->batch_tail =(q->head +BATCH_SIZE)% N;
     q->head = (q->head +BATCH_SIZE) %N;
@@ -291,14 +304,17 @@ void consumer_fetch(Consumer* w, SharedRingQueue*q) {
 void single_producer_enqueue(SharedRingQueue* q, Slot task){
     if (q->is_committed){
         lock(q->batch_commit_lock);
-        q->logical_occupancy -= committed_accumulation
-        q->committed_accumulation =0;
-        q->is_committed =false;
+        q->logical_occupancy -= q->committed_accumulation;  // ← ADDED
+        q->committed_accumulation = 0;
+        q->is_committed = false;
         unlock(q->batch_commit_lock);
     }
-    q->buffer[q->head] =task;
-    q->head = (q->head +1) %N;
-    q->num_used_slots +=1;
+    if (q->logical_occupancy >= N) {
+        return; //Queue full
+    }
+    q->buffer[q->tail] = task;
+    q->tail = (q->tail + 1) % N;
+    q->logical_occupancy +=1;
 }
 
 ```
