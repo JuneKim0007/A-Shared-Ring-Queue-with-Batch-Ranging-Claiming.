@@ -276,13 +276,14 @@ void consumer_fetch(Consumer* w, SharedRingQueue*q, int batch_size){
 
     //Failure Check
     //Check if can fetch (e.g., available slots >= batch_size)
+
+    lock(q->lock);
+    bitmap_set(q->active_batches, w->consumer_id);
     if (!can_fetch(q, batch_size)){
         bitmap_clear(q->active_batches, w->consumer_id);
         unlock(q->lock);
         return;
     }
-    lock(q->lock);
-    bitmap_set(q->active_batches, w->consumer_id);
     w->batch_head =q->head;
     w->batch_tail =(q->head +BATCH_SIZE)% N;
     q->head = (q->head +BATCH_SIZE) %N;
