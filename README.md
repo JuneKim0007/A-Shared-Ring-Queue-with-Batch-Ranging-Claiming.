@@ -273,9 +273,7 @@ struct consumer {
 };
 
 void consumer_fetch(Consumer* w, SharedRingQueue*q, int batch_size){
-    bitmap_set(q->active_batches, w->consumer_id);
-    
-    lock(q->lock);
+
     //Failure Check
     //Check if can fetch (e.g., available slots >= batch_size)
     if (!can_fetch(q, batch_size)){
@@ -283,6 +281,8 @@ void consumer_fetch(Consumer* w, SharedRingQueue*q, int batch_size){
         unlock(q->lock);
         return;
     }
+    lock(q->lock);
+    bitmap_set(q->active_batches, w->consumer_id);
     w->batch_head =q->head;
     w->batch_tail =(q->head +BATCH_SIZE)% N;
     q->head = (q->head +BATCH_SIZE) %N;
