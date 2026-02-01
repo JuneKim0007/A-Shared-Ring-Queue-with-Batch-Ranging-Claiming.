@@ -92,7 +92,7 @@ struct consumer {
 * **`active_batches:`** Bitmap tracking which consumers currently have an active batch.
 * **`batch_committed:`** Flag indicating that all active batches have been completed and the producer can safely consume the committed count.
 * **`batched_dequeue_count:`** Counter that accumulates the total number of slots dequeued by all participating consumers during the current batch. Once the batch completes, it flushed/added to `committed_dequeue_count`
-* **`committed_dequeue_count:`** Aggregated counter visible to the producer, used by the producer to advance the tail.
+* **`committed_dequeue_count:`** Aggregated counter visible to the producer, used by the producer to update logical\_occupancy.
 * The **`batch_commit_lock:`** Lock used to synchronize the updates between the producer and consumer regarding `num_occupancy` after consumers finish processing their batches.
 
 `logical_occupancy` is used by the producer to determine the number of currently occupied slots in the queue. Unlike traditional ring queues, which calculate occupancy based on the `head` and `tail` pointers, `logical_occupancy` provides a direct representation of the queue's occupied slots for the producer. These design assumptions will be further elaborated in a later section.
@@ -154,7 +154,7 @@ Each consumer is assigned a unique index `i` corresponding to its `consumer_id`.
 * **`active_batches`** — a bitmap with one bit per consumer indicating whether that consumer has an active batch.
 * **`batched_dequeue_count`** — an integer counter tracking the total number of slots claimed by all active batches.
 
-When a consumer begins fetching a batch, it first sets the corresponding bit in `active_batches` according to its `consumer_id`. After marking its batch range and completing the dequeue operation, the consumer clears its bit. Since each consumer has a unique `consumer_id`, the bitmap value being zero indicates that no consumers are currently participating in batching. When all bits are cleared, it ensures that all active batching participants have finished dequeuing, and it is therefore safe to advance `SharedRingQueue.tail`. There are yet two additional issues related to this mechanism that are bitmap.value never being set to 0, and producer enqueing violating queue's correctness.
+When a consumer begins fetching a batch, it first sets the corresponding bit in `active_batches` according to its `consumer_id`. After marking its batch range and completing the dequeue operation, the consumer clears its bit. Since each consumer has a unique `consumer_id`, the bitmap value being zero indicates that no consumers are currently participating in batching. When all bits are cleared, it ensures that all active batching participants have finished dequeuing, and it is therefore safe to update the `logical_occupancy`. There are yet two additional issues related to this mechanism that are bitmap.value never being set to 0, and producer enqueing violating queue's correctness.
 
 ### Mechanism 2: **Bitmap-Based Dequeue Procedure**
 
