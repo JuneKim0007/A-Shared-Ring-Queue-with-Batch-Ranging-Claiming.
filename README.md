@@ -29,10 +29,7 @@ Keywords: ring queue, bitmap, batch dequeue, lock contention, range reservation,
 
 ## TL;DR:&#x20;
 
-**Quick Self Question and the Answer to suspicious Readers:**&#x20;
-
-* _Does it really work?_
-* _**Yes, It works and I have tested out.**_
+**Quick Answer to suspicious Readers:&#x20;**_**This model does work (Yay!!); I have implemented in Python (process-level Parallelism).d**_
 
 A shared ring queue in which multiple consumers only claim contiguous batch dequeue ranges atomically and performing actual removal outside the critical section to reduce lock contention. A bitmap and additional metadata are used to coordinate consumers and producers while preserving a circular, contiguous memory layout. For pseudo code, refer to the last section.
 
