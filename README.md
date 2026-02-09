@@ -1,23 +1,3 @@
----
-description: >-
-  A shared ring queue design for multiple consumers using bitmap-based batch
-  dequeue. Consumers claim contiguous dequeue ranges to reduce lock contention
-  while preserving a circular queue structure
-layout:
-  width: default
-  title:
-    visible: true
-  description:
-    visible: false
-  tableOfContents:
-    visible: true
-  outline:
-    visible: true
-  pagination:
-    visible: true
-  metadata:
-    visible: true
----
 
 # A Shared Ring Queue with Batch Ranging Claiming.
 
